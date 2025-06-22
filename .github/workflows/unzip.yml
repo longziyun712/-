@@ -1,40 +1,83 @@
-name: Fix Encoding & Permissions
-on: [push]
+name: Deep Fix Filename Encoding
+on: 
+  workflow_dispatch:  # 允许手动触发
+  push:
+    paths:
+      - '代码/inspectionProfiles.zip'
 
 jobs:
-  process:
+  deep-fix:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # 关键权限声明
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install tools
+      # 安装高级编码工具
+      - name: Install enhanced tools
         run: |
           sudo apt-get update
-          sudo apt-get install unzip convmv -y
-
-      - name: Unzip files
+          sudo apt-get install -y p7zip-full iconv convmv cjkuni-fonts
+      
+      # 完整解压流程
+      - name: Deep extraction
         run: |
-          unzip "代码/inspectionProfiles.zip" -d "my-folder/" || echo "解压完成"
+          # 创建临时工作区
+          mkdir temp_extract
+          
+          # 使用7z解压并保持原始编码
+          7z x -y -otemp_extract "代码/inspectionProfiles.zip"
+          
+          # 递归转换文件名编码
+          find temp_extract -depth -name "*" | while read file; do
+            newname=$(echo "$file" | iconv -f GBK -t UTF-8//IGNORE)
+            if [ "$file" != "$newname" ]; then
+              mv -v "$file" "$newname"
+            fi
+          done
+          
+          # 移动处理后的文件
+          mv temp_extract/* my-folder/
+          rm -rf temp_extract
 
-      - name: Fix filename encoding
+      # 清理不可见字符
+      - name: Sanitize filenames
         run: |
-          convmv -f GBK -t UTF-8 --notest -r "my-folder/" 
-          find "my-folder" -exec rename 's/[^a-zA-Z0-9_.\/-]//g' {} \;
+          find my-folder -name "*" -print0 | while IFS= read -r -d '' file; do
+            # 删除控制字符
+            clean_name=$(echo "$file" | tr -cd '\11\12\40-\176\240-\377')
+            # 替换特殊符号
+            clean_name=${clean_name//[^a-zA-Z0-9_. \u4e00-\u9fa5-]/_}
+            if [ "$file" != "$clean_name" ]; then
+              mv -v "$file" "$clean_name"
+            fi
+          done
 
-      - name: Commit changes
+      # 可视化验证
+      - name: Generate file tree report
+        run: |
+          tree my-folder/ > file-structure.txt
+          find my-folder/ -type f -name "*.py" | head -5 > sample-files.txt
+      
+      - name: Upload file structure report
+        uses: actions/upload-artifact@v3
+        with:
+          name: file-structure-report
+          path: |
+            file-structure.txt
+            sample-files.txt
+
+      # 最终提交
+      - name: Commit fixed files
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config user.name "编码修复系统"
+          git config user.email "encoding-fix@github.com"
           
-          REPO_URL="https://${{ github.actor }}:$GH_TOKEN@github.com/${{ github.repository }}.git"
-          
-          git add .
-          git commit -m "自动修复编码 [skip ci]" || exit 0
-          git push "$REPO_URL"
+          git add my-folder/
+          git commit -m "文件编码深度修复 [skip ci]"
+          git push origin main
