@@ -13,7 +13,7 @@ jobs:
       
       - run: |
           unzip 代码/inspectionProfiles.zip -d my-folder/
-          rm 代码/inspectionProfiles.zip || echo "文件已删除"
+
       
       - name: 提交变更
         env:
