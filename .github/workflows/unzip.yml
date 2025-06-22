@@ -23,8 +23,10 @@ jobs:
 
       - name: Extract files
         run: |
-          unzip -q "代码/inspectionProfiles.zip" -d "my-folder/"
-          rm -v "代码/inspectionProfiles.zip"
+          sudo apt-get install convmv -y  # 安装编码转换工具
+          unzip -O GB18030 "代码/inspectionProfiles.zip" -d "my-folder/"
+          convmv -f GB18030 -t UTF-8 --notest "my-folder/"*  # 转换编码
+
 
       - name: Commit changes
         env:
