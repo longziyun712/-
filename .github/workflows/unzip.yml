@@ -1,0 +1,20 @@
+name: Unzip Folder
+on: [push]
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          unzip inspectionProfiles.zip -d my-folder/
+          rm my-folder.zip  # 可选：删除压缩包
+      - uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: 'my-folder/unzipped.txt',  # 示例文件
+              content: Buffer.from('解压完成').toString('base64'),
+              message: '自动解压ZIP文件'
+            })
