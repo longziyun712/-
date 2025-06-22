@@ -1,26 +1,40 @@
-name: Fix Encoding Unzip
+name: Fix Encoding & Permissions
 on: [push]
 
 jobs:
-  unzip:
+  process:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 关键权限声明
+
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          fetch-depth: 0
+
       - name: Install tools
-        run: sudo apt-get install -y p7zip-full convmv
-
-      - name: Extract with encoding fix
         run: |
-          7z x -o"my-folder/" -y "代码/inspectionProfiles.zip"
-          convmv -f GBK -t UTF-8 --notest "my-folder/"*
+          sudo apt-get update
+          sudo apt-get install unzip convmv -y
 
-      - name: Commit results
+      - name: Unzip files
+        run: |
+          unzip "代码/inspectionProfiles.zip" -d "my-folder/" || echo "解压完成"
+
+      - name: Fix filename encoding
+        run: |
+          convmv -f GBK -t UTF-8 --notest -r "my-folder/" 
+          find "my-folder" -exec rename 's/[^a-zA-Z0-9_.\/-]//g' {} \;
+
+      - name: Commit changes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config --global user.name "Auto Fix"
-          git config --global user.email "auto@github.com"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          REPO_URL="https://${{ github.actor }}:$GH_TOKEN@github.com/${{ github.repository }}.git"
+          
           git add .
-          git commit -m "Fix filename encoding" || echo "No changes"
-          git push
+          git commit -m "自动修复编码 [skip ci]" || exit 0
+          git push "$REPO_URL"
