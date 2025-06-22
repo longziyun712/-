@@ -1,15 +1,12 @@
 name: Unzip Folder
-on:
-  push:
-    paths:
-      - './代码/inspectionProfiles.zip'
+on: [push]
 
 jobs:
   unzip:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get install unzip -y  # 确保unzip工具存在
+      - run: sudo apt-get install unzip -y  # 确保解压工具存在
       - run: |
           unzip 代码/inspectionProfiles.zip -d my-folder/
           rm 代码/inspectionProfiles.zip
