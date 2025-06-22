@@ -2,7 +2,7 @@ name: Unzip Folder
 on:
   push:
     paths:
-      - '代码/inspectionProfiles.zip'
+      - './代码/inspectionProfiles.zip'
 
 jobs:
   unzip:
