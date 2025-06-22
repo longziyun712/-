@@ -10,7 +10,7 @@ jobs:
           fetch-depth: 0  # 获取完整历史记录
       
       - run: sudo apt-get install unzip -y
-      
+       
       - run: |
           unzip 代码/inspectionProfiles.zip -d my-folder/
 
