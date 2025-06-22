@@ -6,7 +6,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          unzip inspectionProfiles.zip -d my-folder/
+          unzip 代码/inspectionProfiles.zip -d my-folder/
           rm my-folder.zip  # 可选：删除压缩包
       - uses: actions/github-script@v6
         with:
