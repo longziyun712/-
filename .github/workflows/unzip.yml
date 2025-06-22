@@ -1,27 +1,43 @@
-name: Unzip Folder
+name: Auto Unzip and Commit
 on: [push]
 
 jobs:
   unzip:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # 获取完整历史记录
-      
-      - run: sudo apt-get install unzip -y
-       
-      - run: |
-          unzip 代码/inspectionProfiles.zip -d my-folder/
+    permissions:  # 新增权限声明
+      contents: write  # 授予仓库内容写入权限
 
-      
-      - name: 提交变更
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整提交历史
+
+      - name: Install unzip
+        run: sudo apt-get install unzip -y
+
+      - name: Verify zip file
+        run: |
+          [ -f "代码/inspectionProfiles.zip" ] || { echo "压缩包不存在"; exit 1; }
+          file "代码/inspectionProfiles.zip" | grep "Zip archive" || { echo "非ZIP文件"; exit 1; }
+
+      - name: Extract files
+        run: |
+          unzip -q "代码/inspectionProfiles.zip" -d "my-folder/"
+          rm -v "代码/inspectionProfiles.zip"
+
+      - name: Commit changes
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用自动生成的token
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+          
+          # 仅当有变更时提交
           git add .
-          git status
-          git diff-index --quiet HEAD || git commit -m "自动提交解压文件"
-          git push "https://${{ github.actor }}:$GH_TOKEN@github.com/${{ github.repository }}.git"
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "自动提交解压文件 [skip ci]"
+            git push origin main
+          else
+            echo "没有文件变更，跳过提交"
+          fi
