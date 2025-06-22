@@ -1,68 +1,102 @@
-# 全新工作流方法（.github/workflows/deep-repair.yml）
-name: 深度编码修复
+name: 中文文件名修复
 on: [push]
 
 jobs:
-  repair:
+  chinese-fix:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
+      
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: main  # 指定分支
 
-      # Step 1: 创建全新工作区（避开污染环境）
-      - name: 重置工作区
+      # 1. 安装专业中文编码工具
+      - name: 安装编码工具包
         run: |
-          rm -rf my-folder
-          mkdir virgin-files
-          7z x -y -ovirgin-files/ "代码/inspectionProfiles.zip"
-
-      # Step 2: 原生二进制修复
-      - name: 二进制级修复
+          sudo apt-get update
+          sudo apt-get install -y unar convmv iconv python3
+          pip install chardet
+          
+      # 2. 创建纯净解压环境
+      - name: 纯净解压
         run: |
-          # 递归处理所有文件
-          find virgin-files -type f -print0 | while IFS= read -r -d $'\0' file; do
-            # 生成纯字母数字的新文件名
-            newname=$(echo "$file" | md5sum | cut -d' ' -f1)
-            # 保留原始扩展名
-            extension="${file##*.}"
-            mv "$file" "$(dirname "$file")/${newname}.${extension}"
+          rm -rf raw-files
+          mkdir raw-files
+          
+          # 使用专用中文解压工具
+          unar -e GBK -o raw-files/ "代码/inspectionProfiles.zip"
+          
+      # 3. 深度编码修复（双重验证）
+      - name: 递归修复文件名
+        run: |
+          # 第一阶段修复：系统级转换
+          convmv -f GBK -t UTF-8 --notest -r raw-files/
+          
+          # 第二阶段修复：Python精确处理
+          python3 -c '
+          import os, sys
+          from chardet import detect
+          
+          def fix_encoding(path):
+              for name in os.listdir(path):
+                  fullpath = os.path.join(path, name)
+                  
+                  # 检测实际编码
+                  with open(fullpath, "rb") as f:
+                      raw_name = name.encode("latin1")
+                      encoding = detect(raw_name)["encoding"] or "GBK"
+                  
+                  # 精确转换
+                  try:
+                      decoded = raw_name.decode(encoding)
+                      fixed = decoded.encode("utf-8", "ignore").decode("utf-8")
+                      if name != fixed:
+                          os.rename(fullpath, os.path.join(path, fixed))
+                  except Exception as e:
+                      print(f"修复失败: {name} -> {e}")
+          
+          fix_encoding("raw-files")
+          '
+      
+      # 4. 生成修复报告
+      - name: 创建验证报告
+        run: |
+          echo "### 文件名修复验证报告" > encoding-report.md
+          echo "| 原始文件名 | 修复后文件名 |" >> encoding-report.md
+          echo "|------------|--------------|" >> encoding-report.md
+          
+          find raw-files -maxdepth 1 -type d | while read dir; do
+            orig_name=$(basename "$dir" | iconv -f latin1)
+            fixed_name=$(basename "$dir")
+            echo "| $orig_name | $fixed_name |" >> encoding-report.md
           done
-
-      # Step 3: 智能重建目录结构
-      - name: 重构文件体系
+          
+          # 移动修复后文件
+          mv raw-files/* my-folder/
+      
+      # 5. 可视化验证
+      - name: 生成文件树
         run: |
-          # 创建逻辑分组文件夹
-          mkdir -p my-folder/code-modules
-          mkdir -p my-folder/data-assets
-          mkdir -p my-folder/docs-resources
-          
-          # 根据文件类型自动归类
-          find virgin-files -type f -name "*.py" -exec mv {} my-folder/code-modules/ \;
-          find virgin-files -type f -name "*.js" -exec mv {} my-folder/code-modules/ \;
-          find virgin-files -type f -name "*.txt" -exec mv {} my-folder/docs-resources/ \;
-          find virgin-files -type f -name "*.csv" -exec mv {} my-folder/data-assets/ \;
-          
-          # 处理剩余文件
-          find virgin-files -type f -exec mv {} my-folder/ \;
-
-      # Step 4: 生成导航文件
-      - name: 创建索引
-        run: |
-          echo "# 文件自动分类索引" > my-folder/README.md
-          echo "| 原始路径 | 新位置 |" >> my-folder/README.md
-          echo "|----------|---------|" >> my-folder/README.md
-          
-          find virgin-files -type f -printf "| %p | my-folder/%f |\n" >> my-folder/README.md
-
-      # Step 5: 最终提交
-      - name: 完成修复
+          tree my-folder/ --charset=Unicode -f > file-tree.txt
+      
+      - name: 上传验证文件
+        uses: actions/upload-artifact@v3
+        with:
+          name: encoding-repair-results
+          path: |
+            encoding-report.md
+            file-tree.txt
+      
+      # 6. 安全提交
+      - name: 提交修复结果
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git add my-folder/
-          git commit -m "深度编码修复完成"
+          git config user.name "中文编码修复系统"
+          git config user.email "gbk-fix@github.com"
+          git add .
+          git commit -m "专业修复GBK/GB2312编码文件"
           git push
