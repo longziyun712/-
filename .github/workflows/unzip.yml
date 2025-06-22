@@ -1,10 +1,9 @@
-name: 文件解压与修复
+# 全新工作流方法（.github/workflows/deep-repair.yml）
+name: 深度编码修复
 on: [push]
 
 jobs:
-  unzip:
-    # ↓↓↓ 新增跳过检测 ↓↓↓
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+  repair:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -12,25 +11,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取完整历史
+          fetch-depth: 0
 
-      - name: 安装工具
-        run: sudo apt-get install unzip convmv -y
-
-      - name: 解压文件
-        run: unzip "代码/inspectionProfiles.zip" -d "my-folder/"
-
-      - name: 修复文件名编码
+      # Step 1: 创建全新工作区（避开污染环境）
+      - name: 重置工作区
         run: |
-          convmv -f gbk -t utf8 --notest -r my-folder/
-          find my-folder/ -name "*" -exec rename 's/[^[:print:]]//g' {} \;
-        
-      - name: 提交修复结果
+          rm -rf my-folder
+          mkdir virgin-files
+          7z x -y -ovirgin-files/ "代码/inspectionProfiles.zip"
+
+      # Step 2: 原生二进制修复
+      - name: 二进制级修复
+        run: |
+          # 递归处理所有文件
+          find virgin-files -type f -print0 | while IFS= read -r -d $'\0' file; do
+            # 生成纯字母数字的新文件名
+            newname=$(echo "$file" | md5sum | cut -d' ' -f1)
+            # 保留原始扩展名
+            extension="${file##*.}"
+            mv "$file" "$(dirname "$file")/${newname}.${extension}"
+          done
+
+      # Step 3: 智能重建目录结构
+      - name: 重构文件体系
+        run: |
+          # 创建逻辑分组文件夹
+          mkdir -p my-folder/code-modules
+          mkdir -p my-folder/data-assets
+          mkdir -p my-folder/docs-resources
+          
+          # 根据文件类型自动归类
+          find virgin-files -type f -name "*.py" -exec mv {} my-folder/code-modules/ \;
+          find virgin-files -type f -name "*.js" -exec mv {} my-folder/code-modules/ \;
+          find virgin-files -type f -name "*.txt" -exec mv {} my-folder/docs-resources/ \;
+          find virgin-files -type f -name "*.csv" -exec mv {} my-folder/data-assets/ \;
+          
+          # 处理剩余文件
+          find virgin-files -type f -exec mv {} my-folder/ \;
+
+      # Step 4: 生成导航文件
+      - name: 创建索引
+        run: |
+          echo "# 文件自动分类索引" > my-folder/README.md
+          echo "| 原始路径 | 新位置 |" >> my-folder/README.md
+          echo "|----------|---------|" >> my-folder/README.md
+          
+          find virgin-files -type f -printf "| %p | my-folder/%f |\n" >> my-folder/README.md
+
+      # Step 5: 最终提交
+      - name: 完成修复
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "自动修复系统"
-          git config user.email "auto-repair@github.com"
-          git add .
-          git commit -m "修复文件编码"  # ← 移除了 [skip ci]
+          git add my-folder/
+          git commit -m "深度编码修复完成"
           git push
